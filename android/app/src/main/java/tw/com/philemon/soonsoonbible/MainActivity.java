@@ -2,6 +2,11 @@ package tw.com.philemon.soonsoonbible;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.os.Build;
+import android.graphics.Color;
+import android.graphics.Insets;
+import android.view.WindowInsets;
+import android.widget.FrameLayout;
 import android.net.Uri;
 import android.view.View;
 import android.webkit.WebChromeClient;
@@ -26,13 +31,36 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setStatusBarColor(android.graphics.Color.rgb(250, 250, 250));
-        getWindow().setNavigationBarColor(android.graphics.Color.rgb(250, 250, 250));
+        // Android 15+ enforces edge-to-edge drawing. Insets are handled natively
+        // at the outer FrameLayout so that the fixed HTML header/footer have
+        // a correctly sized WebView viewport and never overlap system bars.
+        int background = Color.rgb(250, 250, 250);
+        getWindow().setStatusBarColor(background);
+        getWindow().setNavigationBarColor(background);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR |
             View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        getWindow().getDecorView().setBackgroundColor(background);
 
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(background);
         webView = new WebView(this);
-        setContentView(webView);
+        root.addView(webView, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(root);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+            root.setOnApplyWindowInsetsListener((view, windowInsets) -> {
+                Insets safe = windowInsets.getInsets(
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+                return WindowInsets.CONSUMED;
+            });
+            root.requestApplyInsets();
+        } else {
+            // On Android 8-10 the window already fits system bars by default.
+            // Do not add padding there or the safe area would be doubled.
+        }
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
