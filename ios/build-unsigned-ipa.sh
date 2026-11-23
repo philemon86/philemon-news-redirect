@@ -21,6 +21,17 @@ xcrun swiftc \
     ios/SoonsoonBible.swift
 cp ios/Info.plist "$APP/Info.plist"
 cp -R android/app/src/main/assets/web "$APP/web"
+# Default to Simplified Chinese on mainland-oriented iOS installs, while
+# retaining the user's language preference once switched in the app.
+python3 - "$APP/web/language.js" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+old = "valid(saved)?saved:'zh-Hant'"
+assert old in text, "Language preference initialization changed upstream"
+path.write_text(text.replace(old, "valid(saved)?saved:'zh-Hans'"), encoding="utf-8")
+PY
 swift ios/make_icon.swift "$APP/Icon.png"
 plutil -lint "$APP/Info.plist"
 test -s "$APP/web/bible.csv"
