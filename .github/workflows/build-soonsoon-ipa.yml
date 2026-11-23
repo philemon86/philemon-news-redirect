@@ -1,0 +1,44 @@
+name: Build Soonsoon Bible iOS Offline Unsigned IPA
+on:
+  push:
+    branches: [apk-soonsoon-offline-20261123]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/build-soonsoon-ipa.yml'
+  workflow_dispatch:
+
+jobs:
+  build-ios-unsigned:
+    runs-on: macos-15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mirror all 66 books and offline JavaScript
+        run: python3 android/mirror.py
+      - name: Check Apple compiler and SDK
+        run: |
+          xcodebuild -version
+          xcrun swiftc --version
+          xcrun --sdk iphoneos --show-sdk-path
+      - name: Compile iPhone arm64 app and package unsigned IPA
+        run: bash ios/build-unsigned-ipa.sh output
+      - name: Verify completely embedded searchable Bible data
+        run: |
+          set -e
+          unzip -l output/SoonsoonBible-iOS-UNSIGNED.ipa | grep -E 'Payload/SoonsoonBible.app/web/(bible.csv|data/manifest.json|search-worker.js)'
+          unzip -p output/SoonsoonBible-iOS-UNSIGNED.ipa Payload/SoonsoonBible.app/Info.plist | plutil -lint -
+          ls -lh output/*.ipa
+      - name: Package complete iOS source with offline resources
+        run: |
+          zip -qry output/SoonsoonBible-iOS-Source.zip ios android/mirror.py android/app/src/main/assets/web
+          ls -lh output/*.zip
+      - name: Upload IPA and iOS source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: SoonsoonBible-iOS-Offline-Unsigned
+          path: |
+            output/SoonsoonBible-iOS-UNSIGNED.ipa
+            output/SoonsoonBible-iOS-Source.zip
+          retention-days: 90
+          if-no-files-found: error
