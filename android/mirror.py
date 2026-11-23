@@ -36,6 +36,11 @@ def grab(relative):
 
 html = grab("index.html").decode("utf-8")
 html = re.sub(r'<script[^>]*ga4-unified\.js[^>]*></script>', '', html, flags=re.I)
+# Online ranking dashboard and bookstore links cannot work in a networkless APK.
+html, removed_links = re.subn(
+    r'''<a\b[^>]*href=["'](?:\./rankings\.html|https://www\.pbooks\.com\.tw/?)["'][^>]*>.*?</a>''',
+    "", html, flags=re.I | re.S)
+assert removed_links == 2, f"Unexpected external links count: {removed_links}"
 (OUTPUT / "index.html").write_text(html, encoding="utf-8")
 
 for name in ("style.css","favicon.svg","app.js","search-worker.js","core.js","books.js","chinese.js","language.js"):
@@ -52,6 +57,24 @@ while queue:
         path = posixpath.normpath(posixpath.join(posixpath.dirname(filename), urlsplit(src).path))
         if path not in downloaded: grab(path)
         if path not in seen_js: queue.append(path)
+
+# Match the Android offline behavior in the built-in help and shared search URL.
+app = OUTPUT / "app.js"
+app_source = app.read_text(encoding="utf-8")
+app_source = app_source.replace(
+    "我們記錄匿名搜尋與複製彙總，改善查經體驗；不建立個人檔案，不在統計資料庫保存姓名、email 或 IP。短暫搜尋識別碼用於計算轉換並在兩天內清除。",
+    "離線版完全不收集或傳送搜尋、複製及其他使用統計。")
+app_source = app_source.replace(
+    "GA4 用於整體流量、裝置及互動分析。搜尋內容不送入 GA4；網址中的搜尋詞也會從 GA4 頁面資料移除。",
+    "聖經資料與搜尋程式均已內建，開啟飛航模式也能使用。")
+app_source = app_source.replace(
+    "navigator.clipboard.writeText(location.href)",
+    "navigator.clipboard.writeText(location.href.replace('https://appassets.androidplatform.net/assets/web/', 'https://www.philemon.com.tw/soonsoonbible/'))")
+app_source, replaced = re.subn(
+    r"c\.append\(d,field\('匿名使用統計'.*?location\.reload\(\);\}\)\);",
+    "c.append(d);", app_source, flags=re.S)
+assert replaced == 1, "Analytics preference not found"
+app.write_text(app_source, encoding="utf-8")
 
 # Local no-op telemetry keeps original interface while eliminating all network calls.
 (OUTPUT / "telemetry.js").write_text(
