@@ -1,0 +1,59 @@
+name: Test Soonsoon Bible Offline iPhone Simulator
+on:
+  push:
+    branches: [apk-soonsoon-offline-20261123]
+    paths:
+      - '.github/workflows/test-soonsoon-ios-simulator.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mirror bundled resources
+        run: python3 android/mirror.py
+      - name: Build simulator app
+        run: |
+          set -e
+          APP="$PWD/simulator/SoonsoonBible.app"
+          mkdir -p "$APP"
+          SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun swiftc -sdk "$SDK" -target arm64-apple-ios15.0-simulator -swift-version 5 -parse-as-library -O -emit-executable -o "$APP/SoonsoonBible" ios/SoonsoonBible.swift
+          cp ios/Info.plist "$APP/Info.plist"
+          cp -R android/app/src/main/assets/web "$APP/web"
+          python3 - "$APP/web/language.js" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          s=p.read_text()
+          p.write_text(s.replace("valid(saved)?saved:'zh-Hant'", "valid(saved)?saved:'zh-Hans'"))
+          PY
+          swift ios/make_icon.swift "$APP/Icon.png"
+      - name: Boot iPhone and launch offline app
+        run: |
+          set -e
+          UDID="$(python3 - <<'PY'
+          import json, subprocess
+          j=json.loads(subprocess.check_output(['xcrun','simctl','list','-j','devices','available']))
+          ds=[d for group in j['devices'].values() for d in group if d.get('isAvailable') and 'iPhone' in d['name']]
+          print(ds[0]['udid'] if ds else '')
+          PY
+          )"
+          if [ -z "$UDID" ]; then echo "No iPhone simulator available"; exit 1; fi
+          echo "Simulator UDID: $UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" simulator/SoonsoonBible.app
+          xcrun simctl launch "$UDID" tw.com.philemon.soonsoonbible
+          sleep 10
+          mkdir -p simulator/results
+          xcrun simctl io "$UDID" screenshot simulator/results/iphone-offline-screen.png
+          ls -lh simulator/results/
+      - name: Save simulator screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SoonsoonBible-iOS-Simulator-Screen
+          path: simulator/results/iphone-offline-screen.png
+          if-no-files-found: warn
