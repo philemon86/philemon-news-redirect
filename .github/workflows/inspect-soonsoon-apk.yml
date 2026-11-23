@@ -6,26 +6,22 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect browser code and assets
+      - name: Inspect main modules
         run: |
           python3 - <<'PY'
           import urllib.request, re
           from urllib.parse import urljoin
           base='https://www.philemon.com.tw/soonsoonbible/'
-          urls=['app.js','style.css','favicon.svg']
-          for path in urls:
-            url=urljoin(base,path)
+          paths=['app.js','search-worker.js','core.js','chinese.js','language.js','telemetry.js']
+          for path in paths:
             try:
-              r=urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'}),timeout=30)
-              s=r.read().decode('utf-8','replace')
-              print('\nFILE',path,len(s),r.headers.get('Content-Type'))
-              if path.endswith('.js'):
-                print('PREVIEW',s[:2600])
-                for pattern in [r'fetch\\s*\\(',r'\\.json',r'\\.csv',r'indexedDB',r'localStorage',r'(?i)import\\s',r'https?://',r'bible']:
-                  mm=list(re.finditer(pattern,s))
-                  print('PATTERN',pattern,'COUNT',len(mm))
-                  for m in mm[:30]:
-                    print('  ',s[max(0,m.start()-150):min(len(s),m.start()+250)].replace('\n',' ')[:400])
-              else: print('PREVIEW',s[:500])
-            except Exception as e:print('ERROR',path,type(e).__name__,str(e))
+              response=urllib.request.urlopen(urllib.request.Request(urljoin(base,path),headers={'User-Agent':'Mozilla/5.0'}),timeout=30)
+              s=response.read().decode('utf-8','replace')
+              print('\\nFILE',path,len(s))
+              print('IMPORTS',re.findall(r"from ['\"]([^'\"]+)",s))
+              for term in ['fetch(', 'import(', '.json', '.csv', 'https://','http://','/api/','/data/','new URL(','Worker(','localStorage','indexDB','indexedDB']:
+                pos=[m.start() for m in re.finditer(re.escape(term),s)]
+                print('MATCH',term,len(pos),*[s[max(0,p-130):p+210].replace('\\n',' ') for p in pos[:16]],sep='\\n    ')
+              if path in ['search-worker.js','telemetry.js']:print('FULL',s[:18000])
+            except Exception as e: print('ERROR',path,str(e))
           PY
