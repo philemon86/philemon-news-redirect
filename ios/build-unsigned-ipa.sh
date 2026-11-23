@@ -15,6 +15,7 @@ xcrun swiftc \
     -sdk "$SDK" \
     -target arm64-apple-ios15.0 \
     -swift-version 5 \
+    -parse-as-library \
     -O \
     -emit-executable \
     -o "$APP/SoonsoonBible" \
